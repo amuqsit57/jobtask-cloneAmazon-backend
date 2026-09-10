@@ -9,7 +9,9 @@
     "start": "node src/server.js",
     "seed": "node src/db/seed.js",
     "migrate": "node src/db/migrate.js",
-    "test:journey": "node test/journey.mjs"
+    "test:journey": "node test/journey.mjs",
+    "seed:extras": "node src/db/seed-extras.js",
+    "test:extras": "node test/extras.mjs"
   },
   "keywords": [],
   "author": "",

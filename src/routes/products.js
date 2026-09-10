@@ -150,7 +150,7 @@ productsRouter.get('/:slug', async (req, res, next) => {
 
     const product = rows[0];
 
-    const [images, variants, reviews, related, breakdown] = await Promise.all([
+    const [images, variants, reviews, related, breakdown, questions] = await Promise.all([
       query(
         'SELECT url, alt FROM product_images WHERE product_id = $1 ORDER BY sort',
         [product.id]
@@ -177,6 +177,21 @@ productsRouter.get('/:slug', async (req, res, next) => {
          WHERE product_id = $1 GROUP BY rating`,
         [product.id]
       ),
+      query(
+        `SELECT q.*,
+                COALESCE(json_agg(
+                  json_build_object('id', a.id, 'author', a.author,
+                                    'body', a.body, 'votes', a.votes)
+                  ORDER BY a.votes DESC
+                ) FILTER (WHERE a.id IS NOT NULL), '[]') AS answers
+         FROM questions q
+         LEFT JOIN answers a ON a.question_id = q.id
+         WHERE q.product_id = $1
+         GROUP BY q.id
+         ORDER BY q.votes DESC, q.created_at DESC
+         LIMIT 6`,
+        [product.id]
+      ),
     ]);
 
     // Group variants by their axis (Color, Size, ...) for the buy box selectors.
@@ -200,6 +215,14 @@ productsRouter.get('/:slug', async (req, res, next) => {
           reviews: reviews.rows.map(serializeReview),
           ratingDistribution: dist,
           related: related.rows.map((r) => serializeProduct(r)),
+          questions: questions.rows.map((q) => ({
+            id: q.id,
+            author: q.author,
+            body: q.body,
+            votes: q.votes,
+            createdAt: q.created_at,
+            answers: q.answers,
+          })),
         },
       }),
     });

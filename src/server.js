@@ -14,6 +14,10 @@ import { authRouter } from './routes/auth.js';
 import { cartRouter } from './routes/cart.js';
 import { ordersRouter } from './routes/orders.js';
 import { categoriesRouter, addressesRouter } from './routes/misc.js';
+import { wishlistRouter } from './routes/wishlist.js';
+import { qaRouter, reviewsRouter } from './routes/community.js';
+import { returnsRouter } from './routes/returns.js';
+import { couponsRouter, primeRouter } from './routes/account.js';
 import { pool } from './db/pool.js';
 
 const app = express();
@@ -77,6 +81,12 @@ app.use('/api/auth', authRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/addresses', addressesRouter);
+app.use('/api/wishlist', wishlistRouter);
+app.use('/api/questions', qaRouter);
+app.use('/api/reviews', reviewsRouter);
+app.use('/api/returns', returnsRouter);
+app.use('/api/coupons', couponsRouter);
+app.use('/api/prime', primeRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `No route for ${req.method} ${req.path}` });

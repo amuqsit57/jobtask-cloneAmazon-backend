@@ -11,6 +11,13 @@ const TAX_RATE = 0.0725;          // flat rate; real tax is jurisdictional
 const FREE_SHIPPING_THRESHOLD = 3500;
 const SHIPPING_FLAT = 599;
 
+// Prime members get the fast tier free; everyone else pays for it.
+const SHIPPING_SPEEDS = {
+  standard: { label: 'FREE Delivery', days: 6, cents: 0 },
+  expedited: { label: 'Expedited Delivery', days: 3, cents: 899 },
+  priority: { label: 'Priority Delivery', days: 1, cents: 1499 },
+};
+
 ordersRouter.get('/', async (req, res, next) => {
   try {
     const { rows } = await query(
@@ -66,7 +73,14 @@ ordersRouter.get('/:orderNumber', async (req, res, next) => {
  */
 ordersRouter.post('/', async (req, res, next) => {
   try {
-    const { shipTo, paymentLast4 } = req.body ?? {};
+    const {
+      shipTo,
+      paymentLast4,
+      couponCode,
+      isGift,
+      giftMessage,
+      shippingSpeed = 'standard',
+    } = req.body ?? {};
     if (!shipTo?.line1 || !shipTo?.city || !shipTo?.postal_code) {
       return res.status(400).json({ error: 'A complete shipping address is required' });
     }
@@ -100,9 +114,48 @@ ordersRouter.post('/', async (req, res, next) => {
         (s, i) => s + Number(i.price_cents) * Number(i.quantity),
         0
       );
-      const shipping = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_FLAT;
-      const tax = Math.round(subtotal * TAX_RATE);
-      const total = subtotal + shipping + tax;
+
+      // The discount is recomputed here rather than trusted from the client, so
+      // a tampered or expired code cannot survive the trip from the cart page.
+      let discount = 0;
+      let appliedCode = null;
+      if (couponCode) {
+        const { rows: cRows } = await c.query(
+          `SELECT * FROM coupons WHERE code = $1 AND active = TRUE
+           AND (expires_at IS NULL OR expires_at > NOW())`,
+          [String(couponCode).trim().toUpperCase()]
+        );
+        const coupon = cRows[0];
+        if (!coupon) {
+          throw Object.assign(new Error('That promo code is not valid'), { status: 400 });
+        }
+        if (subtotal < coupon.min_subtotal_cents) {
+          throw Object.assign(
+            new Error('Your order does not meet the minimum for that code'),
+            { status: 400 }
+          );
+        }
+        discount = coupon.percent_off
+          ? Math.round((subtotal * coupon.percent_off) / 100)
+          : Math.min(coupon.amount_off_cents, subtotal);
+        appliedCode = coupon.code;
+      }
+
+      const speed = SHIPPING_SPEEDS[shippingSpeed] ?? SHIPPING_SPEEDS.standard;
+      const user = await c.query('SELECT is_prime FROM users WHERE id = $1', [req.user.id]);
+      const isPrime = user.rows[0]?.is_prime ?? false;
+
+      let shipping;
+      if (speed.cents > 0) {
+        // Prime covers the upgrade; otherwise the customer pays for it.
+        shipping = isPrime ? 0 : speed.cents;
+      } else {
+        shipping = subtotal >= FREE_SHIPPING_THRESHOLD || isPrime ? 0 : SHIPPING_FLAT;
+      }
+
+      const taxable = Math.max(0, subtotal - discount);
+      const tax = Math.round(taxable * TAX_RATE);
+      const total = taxable + shipping + tax;
 
       const orderNumber =
         '112-' +
@@ -111,18 +164,21 @@ ordersRouter.post('/', async (req, res, next) => {
         String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
 
       const delivery = new Date();
-      delivery.setDate(delivery.getDate() + (shipping === 0 ? 2 : 5));
+      delivery.setDate(delivery.getDate() + speed.days);
 
       const { rows: orderRows } = await c.query(
         `INSERT INTO orders
            (user_id, order_number, subtotal_cents, shipping_cents, tax_cents,
-            total_cents, ship_to, payment_last4, delivery_estimate)
-         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
+            total_cents, ship_to, payment_last4, delivery_estimate,
+            discount_cents, coupon_code, is_gift, gift_message, shipping_speed)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13,$14)
          RETURNING *`,
         [
           req.user.id, orderNumber, subtotal, shipping, tax, total,
           JSON.stringify(shipTo), paymentLast4 ?? '4242',
           delivery.toISOString().slice(0, 10),
+          discount, appliedCode, Boolean(isGift), giftMessage?.trim() || null,
+          shippingSpeed,
         ]
       );
       const created = orderRows[0];
