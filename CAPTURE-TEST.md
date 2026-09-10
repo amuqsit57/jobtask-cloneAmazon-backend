@@ -64,10 +64,14 @@ disk the moment it is sent.
 
 ### Two repos
 
-This submission is two repositories, frontend and backend. Both carry the hook, and
-logs are written to `.agent-logs/` in **both** repos so either repo is independently
-assessable. Each repo's log names itself in its own frontmatter (`project:`) rather
-than inheriting the directory the session happened to start in.
+This submission is two repositories, frontend and backend. Each carries its own copy
+of the hook and writes to its own `.agent-logs/`, so either repo is independently
+assessable and neither writes into the other. Each repo's log names itself in its own
+frontmatter (`project:`) rather than inheriting the directory the session started in.
+
+The parent working directory that spans both repos is not itself a git repository, so
+its copy of the hook mirrors into both — a session started there belongs to neither
+repo and would otherwise be lost.
 
 ## Where the canaries landed
 
@@ -90,8 +94,7 @@ it was submitted. Pasted raw from `.agent-logs/.pending-1f27f20d-....jsonl`:
 {"timestamp":"2026-09-10T09:19:29.939Z","session_id":"1f27f20d-2ebc-48d4-862b-9eb67df2f755","prompt":"no both are different repos fe and be and have logs on both aas they said its working?"}
 ```
 
-The corresponding `Stop` hook then rewrote the session `.md` and both mirrors at
-14:17:15 local, unprompted, at the end of that turn. Entry from the log, raw:
+The corresponding `Stop` hook then rewrote the session `.md` at 14:17:15 local, unprompted, at the end of that turn. Entry from the log, raw:
 
 ```
 [LOG_ENTRY type=PROMPT num=1 session=1f27f20d]
@@ -105,9 +108,32 @@ I have here frontend and backend i am applying for a job and i have to creafte a
 
 ## Canary 2 — second session
 
-> **Pending.** To be filled in with the raw entry from a genuinely separate Claude Code
-> session, confirming the hook is installed at the project level and not merely live in
-> the session that created it.
+**Status: not yet run at time of writing.**
+
+The check exists to distinguish a hook that is genuinely installed at project level
+from one that merely appeared to work in the session that created it. It requires a
+second, separate Claude Code session, which the agent cannot start for itself — it
+runs inside the session under test.
+
+What *is* proven, and is the substance of the check: the hooks fire with no manual
+step. Every prompt below was written to `.agent-logs/.pending-<session>.jsonl` by
+`UserPromptSubmit` at the instant it was submitted, with no capture command run in
+those turns:
+
+```
+1. 2026-09-10T09:19:29.939Z  "no both are different repos fe and be and have logs on both ..."
+2. 2026-09-10T09:25:00.244Z  "i didnt get the canary thing and u can push ig gh is there"
+3. 2026-09-10T09:29:27.346Z  "what do  u mean on the canary thing i cant understand explai..."
+```
+
+The hook is registered in `.claude/settings.json`, which is committed to this repo, so
+any session started in this directory loads it. That was verified by running the repo's
+own copy of the hook against a transcript from an unrelated session id: it produced a
+correct log in this repo's `.agent-logs/` and, correctly, did not write into the other
+repo.
+
+Any later session will be captured automatically and will appear in `.agent-logs/`
+as its own file.
 
 ## Verification of the exclusion rules
 
