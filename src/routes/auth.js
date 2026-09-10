@@ -17,6 +17,9 @@ const publicUser = (u) => ({
   email: u.email,
   name: u.name,
   isPrime: u.is_prime,
+  role: u.role || 'customer',
+  storeName: u.store_name ?? null,
+  storeSlug: u.store_slug ?? null,
 });
 
 authRouter.post('/register', async (req, res, next) => {

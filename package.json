@@ -11,7 +11,9 @@
     "migrate": "node src/db/migrate.js",
     "test:journey": "node test/journey.mjs",
     "seed:extras": "node src/db/seed-extras.js",
-    "test:extras": "node test/extras.mjs"
+    "test:extras": "node test/extras.mjs",
+    "seed:roles": "node src/db/seed-roles.js",
+    "test:roles": "node test/roles.mjs"
   },
   "keywords": [],
   "author": "",

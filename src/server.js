@@ -18,6 +18,8 @@ import { wishlistRouter } from './routes/wishlist.js';
 import { qaRouter, reviewsRouter } from './routes/community.js';
 import { returnsRouter } from './routes/returns.js';
 import { couponsRouter, primeRouter } from './routes/account.js';
+import { sellerRouter } from './routes/seller.js';
+import { adminRouter } from './routes/admin.js';
 import { pool } from './db/pool.js';
 
 const app = express();
@@ -87,6 +89,8 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/returns', returnsRouter);
 app.use('/api/coupons', couponsRouter);
 app.use('/api/prime', primeRouter);
+app.use('/api/seller', sellerRouter);
+app.use('/api/admin', adminRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: `No route for ${req.method} ${req.path}` });

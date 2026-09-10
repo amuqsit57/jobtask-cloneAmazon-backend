@@ -90,7 +90,7 @@ ordersRouter.post('/', async (req, res, next) => {
       if (!cart.rowCount) throw Object.assign(new Error('Your cart is empty'), { status: 400 });
 
       const items = await c.query(
-        `SELECT ci.quantity, p.id, p.title, p.price_cents, p.stock,
+        `SELECT ci.quantity, p.id, p.title, p.price_cents, p.stock, p.seller_id,
                 (SELECT url FROM product_images pi WHERE pi.product_id = p.id
                   ORDER BY sort LIMIT 1) AS image_url
          FROM cart_items ci JOIN products p ON p.id = ci.product_id
@@ -186,9 +186,10 @@ ordersRouter.post('/', async (req, res, next) => {
       for (const it of items.rows) {
         await c.query(
           `INSERT INTO order_items
-             (order_id, product_id, title, image_url, unit_price_cents, quantity)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [created.id, it.id, it.title, it.image_url, it.price_cents, it.quantity]
+             (order_id, product_id, title, image_url, unit_price_cents, quantity, seller_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [created.id, it.id, it.title, it.image_url, it.price_cents, it.quantity,
+           it.seller_id]
         );
         await c.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [
           it.quantity, it.id,

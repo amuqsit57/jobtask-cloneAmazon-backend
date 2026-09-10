@@ -44,6 +44,9 @@ productsRouter.get('/', async (req, res, next) => {
     if (maxPrice) add('p.price_cents <= ?', Math.round(Number(maxPrice) * 100));
     if (minRating) add('p.rating >= ?', Number(minRating));
     if (prime === 'true') where.push('p.is_prime = TRUE');
+    // Only approved listings reach the storefront. Pending, rejected and
+    // archived products stay visible to their seller and to admins only.
+    where.push("p.status = 'active'");
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const orderSql = SORTS[sort] ?? SORTS.featured;
@@ -94,7 +97,7 @@ productsRouter.get('/suggest', async (req, res, next) => {
 
     const { rows } = await query(
       `SELECT title, slug FROM products
-       WHERE title ILIKE $1
+       WHERE title ILIKE $1 AND status = 'active'
        ORDER BY review_count DESC LIMIT 8`,
       [`%${q}%`]
     );
@@ -118,13 +121,13 @@ productsRouter.get('/featured', async (_req, res, next) => {
       );
 
     const [bestSellers, deals, topRated] = await Promise.all([
-      pick('WHERE p.is_best_seller = TRUE ORDER BY p.review_count DESC LIMIT 12'),
+      pick("WHERE p.is_best_seller = TRUE AND p.status = 'active' ORDER BY p.review_count DESC LIMIT 12"),
       pick(
-        `WHERE p.list_price_cents > p.price_cents
+        `WHERE p.list_price_cents > p.price_cents AND p.status = 'active'
          ORDER BY (p.list_price_cents - p.price_cents)::float / p.list_price_cents DESC
          LIMIT 12`
       ),
-      pick('ORDER BY p.rating DESC, p.review_count DESC LIMIT 12'),
+      pick("WHERE p.status = 'active' ORDER BY p.rating DESC, p.review_count DESC LIMIT 12"),
     ]);
 
     res.json({
@@ -141,8 +144,11 @@ productsRouter.get('/featured', async (_req, res, next) => {
 productsRouter.get('/:slug', async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT p.*, c.slug AS category_slug, c.name AS category_name
-       FROM products p LEFT JOIN categories c ON c.id = p.category_id
+      `SELECT p.*, c.slug AS category_slug, c.name AS category_name,
+              u.store_name, u.store_slug
+       FROM products p
+       LEFT JOIN categories c ON c.id = p.category_id
+       LEFT JOIN users u ON u.id = p.seller_id
        WHERE p.slug = $1`,
       [req.params.slug]
     );
@@ -168,7 +174,7 @@ productsRouter.get('/:slug', async (req, res, next) => {
         `SELECT p.*, (SELECT url FROM product_images pi WHERE pi.product_id = p.id
                        ORDER BY sort LIMIT 1) AS image_url
          FROM products p
-         WHERE p.category_id = $1 AND p.id <> $2
+         WHERE p.category_id = $1 AND p.id <> $2 AND p.status = 'active'
          ORDER BY p.rating DESC LIMIT 8`,
         [product.category_id, product.id]
       ),
@@ -215,6 +221,8 @@ productsRouter.get('/:slug', async (req, res, next) => {
           reviews: reviews.rows.map(serializeReview),
           ratingDistribution: dist,
           related: related.rows.map((r) => serializeProduct(r)),
+          storeName: product.store_name ?? null,
+          storeSlug: product.store_slug ?? null,
           questions: questions.rows.map((q) => ({
             id: q.id,
             author: q.author,
