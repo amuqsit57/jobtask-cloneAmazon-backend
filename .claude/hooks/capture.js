@@ -46,6 +46,35 @@ function readStdin() {
   }
 }
 
+/**
+ * Redact secrets before anything is written to disk.
+ *
+ * .agent-logs/ is committed to a public repo, and a prompt is captured verbatim -
+ * including any credential pasted into the chat. Verbatim is the point of the log,
+ * but a live credential is the one thing that must not ship. Structure and length
+ * are preserved so the log still reads honestly: it is visible that a secret was
+ * pasted, just not what it was.
+ */
+function redact(text) {
+  if (typeof text !== 'string' || !text) return text;
+  return text
+    // Connection strings: keep the shape, drop the password.
+    .replace(
+      /((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?):\/\/[^:\s@]+:)([^@\s]+)(@)/gi,
+      '$1[REDACTED]$3'
+    )
+    // Provider tokens that can appear on their own, outside a URL.
+    .replace(/npg_[A-Za-z0-9]{8,}/g, 'npg_[REDACTED]')
+    .replace(/gh[pousr]_[A-Za-z0-9]{16,}/g, '[REDACTED_GITHUB_TOKEN]')
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, '[REDACTED_API_KEY]')
+    .replace(/AKIA[0-9A-Z]{12,}/g, '[REDACTED_AWS_KEY]')
+    // KEY=value and "key": "value" assignments for secret-ish names.
+    .replace(
+      /([A-Za-z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|PRIVATE_KEY)[A-Za-z0-9_]*["']?\s*[=:]\s*)(["']?)([^\s"',;]{6,})\2/gi,
+      '$1$2[REDACTED]$2'
+    );
+}
+
 /** Flatten a message content field (string | block[]) to plain text. */
 function textOf(content, opts = {}) {
   if (typeof content === 'string') return content;
@@ -60,7 +89,7 @@ function textOf(content, opts = {}) {
       continue;
     }
   }
-  return out.join('\n').trim();
+  return redact(out.join('\n').trim());
 }
 
 /**
@@ -315,7 +344,7 @@ function onPrompt(input) {
   const file = path.join(LOG_DIR, `.pending-${sid}.jsonl`);
   fs.appendFileSync(
     file,
-    JSON.stringify({ timestamp: new Date().toISOString(), session_id: sid, prompt }) + '\n',
+    JSON.stringify({ timestamp: new Date().toISOString(), session_id: sid, prompt: redact(prompt) }) + '\n',
     'utf8'
   );
 }
