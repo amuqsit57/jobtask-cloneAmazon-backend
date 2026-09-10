@@ -1,15 +1,7 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { env } from '../lib/env.js';
 
 const { Pool } = pg;
-
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    'DATABASE_URL is not set. Copy .env.example to .env and fill it in.'
-  );
-}
 
 /**
  * Neon terminates idle connections and sits behind a pooler, so a long-lived
@@ -17,7 +9,7 @@ if (!process.env.DATABASE_URL) {
  * recycle rather than holding connections open.
  */
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30_000,
