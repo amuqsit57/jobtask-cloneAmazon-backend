@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+
+# .agent-logs/ ships with this repo as part of the 8x submission.
+# Never ignore it. This negation is deliberate: it survives a framework
+# scaffolder (create-next-app etc.) appending its own rules below.
+!.agent-logs/
+!.agent-logs/**

@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Agent logs are a verbatim record. Keep them byte-for-byte as written.
+.agent-logs/** -text
