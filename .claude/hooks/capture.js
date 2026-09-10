@@ -29,42 +29,13 @@ const PROJECT = 'jobtask-cloneAmazon-backend';
 const TOOL = 'claude-code';
 
 /**
- * This workspace spans three directories: this one (a scratch parent, not a repo)
- * and the two git repos that actually ship. A session started here must still land
- * its logs inside the public repos, so every write is mirrored into each of them.
- */
-const MIRRORS = [
-  {
-    dir: 'c:/Users/abdul/Documents/GitHub/jobtask-cloneAmazon-frontend/.agent-logs',
-    project: 'jobtask-cloneAmazon-frontend',
-  },
-  {
-    dir: 'c:/Users/abdul/Documents/GitHub/jobtask-cloneAmazon-backend/.agent-logs',
-    project: 'jobtask-cloneAmazon-backend',
-  },
-].filter((m) => {
-  try {
-    return fs.existsSync(path.dirname(m.dir));
-  } catch {
-    return false;
-  }
-});
-
-/**
- * Write a file to LOG_DIR and to every mirror target. `render` receives the project
- * name for that destination, so each repo's log names itself rather than inheriting
- * the name of whichever directory the session happened to start in.
+ * A session started in this repo writes its logs here and only here. The parent
+ * scratch directory keeps a mirroring variant of this hook, because a session
+ * started there belongs to neither repo; inside a repo there is nothing to mirror.
  */
 function writeEverywhere(filename, render) {
-  const targets = [{ dir: LOG_DIR, project: PROJECT }, ...MIRRORS];
-  for (const t of targets) {
-    try {
-      fs.mkdirSync(t.dir, { recursive: true });
-      fs.writeFileSync(path.join(t.dir, filename), render(t.project), 'utf8');
-    } catch {
-      /* a mirror being unavailable must never break capture */
-    }
-  }
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+  fs.writeFileSync(path.join(LOG_DIR, filename), render(PROJECT), 'utf8');
 }
 
 function readStdin() {
