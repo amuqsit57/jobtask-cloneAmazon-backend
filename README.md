@@ -13,15 +13,29 @@ npm install
 cp .env.example .env      # fill in DATABASE_URL and JWT_SECRET
 npm run migrate           # create the schema
 npm run seed              # load the catalog
+npm run seed:extras       # coupons and Q&A
+npm run seed:roles        # sellers, admin, and product assignment
 npm run dev               # http://localhost:4000
-npm test                  # 41 assertions across every flow
+
+npm test                  # 41  core API
+npm run test:journey      # 40  full customer journey
+npm run test:extras       # 40  wishlist, Q&A, reviews, returns, Prime
+npm run test:roles        # 54  seller and admin, incl. the marketplace loop
 ```
 
 `npm run seed` is idempotent — it rebuilds the catalog but leaves accounts and
 orders alone, so a reseed during development does not sign everyone out. Pass
 `--reset` to wipe everything including accounts.
 
-Demo account created by the seed: `demo@example.com` / `Password123!`
+Accounts created by the seed, all with the password `Password123!`:
+
+| Email | Role |
+|---|---|
+| `demo@example.com` | customer |
+| `seller@example.com` | seller (Nova Retail Group) |
+| `seller2@example.com` | seller (Harbor Home & Kitchen) |
+| `seller3@example.com` | seller (Meridian Supply Co.) |
+| `admin@example.com` | admin |
 
 ---
 
@@ -47,6 +61,24 @@ Demo account created by the seed: `demo@example.com` / `Password123!`
 | GET | `/api/orders/:orderNumber` | JWT | Single order |
 | POST | `/api/orders` | JWT | Place order from cart |
 | GET/POST | `/api/addresses` | JWT | Saved addresses |
+| GET/POST/PATCH/DELETE | `/api/wishlist` | JWT | Lists, sharing, items |
+| GET | `/api/wishlist/shared/:slug` | — | A public list, no account needed |
+| GET/POST | `/api/questions` | mixed | Product Q&A |
+| GET/POST | `/api/reviews` | mixed | Read, write, vote helpful |
+| POST | `/api/coupons/validate` | — | Promo code check |
+| GET/POST | `/api/prime` | JWT | Membership |
+| GET/POST | `/api/returns` | JWT | Return requests |
+| GET | `/api/seller/stats` | seller | Dashboard metrics |
+| GET/POST/PATCH/DELETE | `/api/seller/products` | seller | Own catalog |
+| GET | `/api/seller/orders` | seller | Own order lines |
+| POST | `/api/seller/orders/:id/ship` | seller | Confirm shipment |
+| PATCH | `/api/seller/inventory/:id` | seller | Stock |
+| GET | `/api/admin/stats` | admin | Platform metrics |
+| GET | `/api/admin/products` | admin | Moderation queue |
+| POST | `/api/admin/products/:id/moderate` | admin | Approve/reject/archive |
+| GET/PATCH | `/api/admin/users` | admin | Users and roles |
+| GET | `/api/admin/orders` | admin | All orders |
+| GET | `/api/admin/actions` | admin | Audit log |
 
 Guest carts are keyed by an `x-cart-session` header.
 
@@ -72,6 +104,26 @@ so there is never an order with no stock movement or a half-emptied cart.
 **Search is Postgres, not a search service.** A generated `tsvector` column with a
 GIN index, weighted title > brand > description, with `ts_rank` relevance
 ordering. Fast enough at this scale and one less moving part to deploy.
+
+**A seller is a role, not a separate system.** Seller Central runs on its own
+domain at Amazon for organisational reasons, not architectural ones. Here a seller
+is a user row with `role = seller` reading the same catalog, so there is one auth
+model, one database and one deployment. `requireRole` gates the new areas, and
+admins pass every check rather than needing duplicated routes.
+
+**Sellers get 404, not 403, on another store's data.** A 403 confirms the row
+exists. Scoping every query by `seller_id` and returning "not found" means the API
+never reveals what it is protecting.
+
+**Listings are moderated before they are visible.** A new product is `pending` and
+excluded from every storefront query until an admin approves it. That is enforced
+in the query, not in the UI, so it holds however the product is reached.
+
+**Products are archived, never deleted.** Past orders reference them, and an order
+must always render what was actually bought.
+
+**Order lines snapshot the seller.** Sales history survives a product being
+reassigned or removed, so a seller dashboard cannot silently lose past revenue.
 
 **Login does the same work whether or not the account exists.** A missing user
 still runs a bcrypt comparison against a dummy hash, so response timing does not
