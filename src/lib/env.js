@@ -20,8 +20,19 @@ export const env = {
 
 const missing = ['DATABASE_URL', 'JWT_SECRET'].filter((k) => !env[k]);
 if (missing.length) {
+  // On a host there is no .env file to copy - the variables come from the
+  // dashboard - so say that rather than giving only the local instruction.
+  const onHost = Boolean(
+    process.env.RENDER || process.env.VERCEL || process.env.FLY_APP_NAME ||
+      process.env.DYNO || process.env.NODE_ENV === 'production'
+  );
   throw new Error(
-    `Missing required environment variable(s): ${missing.join(', ')}. ` +
-      'Copy .env.example to .env and fill it in.'
+    `Missing required environment variable(s): ${missing.join(', ')}.
+` +
+      (onHost
+        ? 'Set them in your host dashboard (Render: Service -> Environment). ' +
+          'render.yaml is only applied to services created from a Blueprint; ' +
+          'a manually created service uses the dashboard values instead.'
+        : 'Copy .env.example to .env and fill it in.')
   );
 }
